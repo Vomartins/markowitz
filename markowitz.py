@@ -11,7 +11,7 @@ class Carteira(object):
         self.descricao = descricao
         self.minFundos = minFundos
        
-    def Exibir(self, C):
+    def exibir(self, C):
         print(f"Retorno esperado --> {round(100 * self.Retorno,2)}%")
         print(f"Risco estimado --> {round(100 * self.Risco,2)}%")
         for i in range(len(self.fundos)):
@@ -47,7 +47,7 @@ class Markowitz(object):
         self.model = gp.Model()
         self.model.Params.LogToConsole = self.log
 
-        self.w = self.model.addVars(range(n), vtype = gp.GRB.CONTINUOUS)
+        self.w = self.model.addVars(range(n), ub = 1, vtype = gp.GRB.CONTINUOUS)
         self.y = self.model.addVars(range(n), vtype = gp.GRB.BINARY)
 
         if(self.obj_type in set(['classico', 'markowitz'])):
@@ -57,11 +57,11 @@ class Markowitz(object):
         else:
             self.obj_fun = self.model.setObjective(gp.quicksum(
                 self.w[i] * self.sigma[i][j] * self.w[j] for i in range(self.n) for j in range(self.n)), sense = gp.GRB.MINIMIZE)
+            self.c1 = self.model.addConstr(gp.quicksum(self.media[i] * self.w[i] for i in range(self.n)) >= self.minRetorno)
     
-        self.c1 = self.model.addConstr(gp.quicksum(self.w[i] for i in range(self.n)) == 1)
-        self.c2 = self.model.addConstrs(self.w[i] >= max(self.P_min, self.minFundos[i]/self.C) * self.y[i] for i in range(self.n))
-        self.c3 = self.model.addConstrs(self.w[i] <= self.P_max * self.y[i] for i in range(self.n))
-        self.c4 = self.model.addConstr(gp.quicksum(self.media[i] * self.w[i] for i in range(self.n)) >= self.minRetorno)
+        self.c2 = self.model.addConstr(gp.quicksum(self.w[i] for i in range(self.n)) == 1)
+        self.c3 = self.model.addConstrs(self.w[i] >= max(self.P_min, self.minFundos[i]/self.C) * self.y[i] for i in range(self.n))
+        self.c4 = self.model.addConstrs(self.w[i] <= self.P_max * self.y[i] for i in range(self.n))
         self.c5 = self.model.addConstr(gp.quicksum(self.y[i] for i in range(self.n)) >= self.K_min)
         self.c6 = self.model.addConstr(gp.quicksum(self.y[i] for i in range(self.n)) <= self.K_max)
         self.c7 = self.model.addConstrs(gp.quicksum(self.w[i] for i in range(self.limites[j] , self.limites[j+1])) <= 
@@ -76,7 +76,7 @@ class Markowitz(object):
             print('Inconsistencia nos valores de P_min VS P_max!')
             return Carteira(0, 0, [], 0, [], [])
 
-        if(sum(self.P_categorias) < 1):
+        if(  round(sum(self.P_categorias), 5) < 1  ):
             print('Problema nos percentuais minimos para cada tipo de fundo!')
             return Carteira(0, 0, [], 0, [], [])
 
@@ -105,8 +105,11 @@ class Markowitz(object):
 
     def update_minRetorno(self, minRetorno = 0):
         self.minRetorno = minRetorno
-        self.model.remove(self.c4)
-        self.c4 = self.model.addConstr(gp.quicksum(self.media[i] * self.w[i] for i in range(self.n)) >= self.minRetorno)
+        try:
+            self.model.remove(self.c1)
+        except:
+            pass
+        self.c1 = self.model.addConstr(gp.quicksum(self.media[i] * self.w[i] for i in range(self.n)) >= self.minRetorno)
         
     def preprocessamento(self):
         self.P_min = min(abs(self.P_min), 1)
