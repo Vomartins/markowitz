@@ -16,21 +16,33 @@ class Carteira(object):
         print(f"Risco estimado --> {round(100 * self.Risco,2)}%")
         for i in range(len(self.fundos)):
             print(f"Fundo {self.fundos[i]} ({self.descricao[i]}) --> {round(100*self.porcentagem[i],2)}%; R$ {round(C*self.porcentagem[i],2)} --> R$ {self.minFundos[i]}")
-            
+
+    def __repr__(self):
+        return ('''Carteira(Retorno={}, Risco={}), Qtd. de fundos={}, porcentagem={}'''.format(
+            self.Retorno, self.Risco, len(self.fundos), self.porcentagem))
+
+    def __str__(self):
+        return ('Um objeto Carteira com {} fundos'.format(len(self.fundos)))
+
 class Markowitz(object):
+
     def __init__(self, C, minRetorno, K_min, K_max, P_min, P_max, P_categorias, limites, 
-        n, minFundos, sigma, media, descricao, l = 1, obj_type = 'Risco', log = 0):
+        n, minFundos, sigma, media, descricao, obj_type = 'Risco', l = 1, log = 0):
         self.C = C
         self.minRetorno = minRetorno
-        self.K_min = K_min
-        self.K_max = K_max
         self.P_min = P_min
         self.P_max = P_max
+
+        self.K_min = max(K_min, ceil(1 / P_max))
+        self.K_max = min(K_max, ceil(1 / P_min))
         self.P_categorias = P_categorias
         self.limites = limites
         self.n = n
         self.log = log
-        self.preprocessamento()
+
+        for idx in range(len(self.P_categorias)):
+            if( (self.P_categorias[idx] < self.P_min) and (self.P_categorias[idx] > 0) ):
+                self.P_categorias[idx] = self.P_min
 
         self.n = n
         self.minFundos = minFundos
@@ -50,7 +62,9 @@ class Markowitz(object):
         self.w = self.model.addVars(range(n), ub = 1, vtype = gp.GRB.CONTINUOUS)
         self.y = self.model.addVars(range(n), vtype = gp.GRB.BINARY)
 
-        if(self.obj_type in set(['classico', 'markowitz'])):
+        self.modelo_classico_labels = set(['classico', 'markowitz'])
+
+        if(self.obj_type in self.modelo_classico_labels):
             self.obj_fun = self.model.setObjective(gp.quicksum(self.media[i] * self.w[i] for i in range(self.n)) - 
             self.l * gp.quicksum(self.w[i] * self.sigma[i][j] * self.w[j] for i in range(self.n) for j in range(self.n)), 
             sense = gp.GRB.MAXIMIZE)
@@ -94,7 +108,11 @@ class Markowitz(object):
             return Carteira(0, 0, [], 0, [], [])
         
         self.Retorno = np.dot(self.media, np.array([self.w[i].x for i in range(len(self.w))]))
-        self.Risco = np.sqrt(self.model.getObjective().getValue())
+        if (self.obj_type in self.modelo_classico_labels):
+            self.vect_w = np.array([[self.w[i].x for i in range(self.n)]]).T
+            self.Risco = float(np.sqrt(self.vect_w.T @ self.sigma @ self.vect_w))
+        else:
+            self.Risco = np.sqrt(self.model.getObjective().getValue())
 
         self.fundos = [i for i in range(len(self.w)) if (self.w[i].x) != 0.0 ]
         self.porcentagem = [self.w[i].x for i in self.fundos]
@@ -102,6 +120,22 @@ class Markowitz(object):
         self.apm_escolhidos = [self.minFundos[i] for i in self.fundos]
 
         return Carteira(self.Retorno, self.Risco, self.fundos, self.porcentagem, self.cnpj_escolhidos, self.apm_escolhidos)
+
+    @property
+    def P_min(self):
+        return self._P_min
+
+    @property
+    def P_max(self):
+        return self._P_max
+
+    @P_min.setter
+    def P_min(self, value):
+        self._P_min = min(abs(value), 1)
+
+    @P_max.setter
+    def P_max(self, value):
+        self._P_max = min(abs(value), 1)
 
     def update_minRetorno(self, minRetorno = 0):
         self.minRetorno = minRetorno
@@ -111,17 +145,6 @@ class Markowitz(object):
             pass
         self.c1 = self.model.addConstr(gp.quicksum(self.media[i] * self.w[i] for i in range(self.n)) >= self.minRetorno)
         
-    def preprocessamento(self):
-        self.P_min = min(abs(self.P_min), 1)
-        self.P_max = min(abs(self.P_max), 1)
-
-        self.K_min = max(self.K_min, ceil(1 / self.P_max))
-        self.K_max = min(self.K_max, ceil(1/self.P_min))
-
-        for idx, p in enumerate(self.P_categorias):
-            if( (self.P_categorias[idx] < self.P_min) and (self.P_categorias[idx] > 0) ):
-                self.P_categorias[idx] = self.P_min
-
     def exibir_par(self):
 
         print('Dados considerados para a otimizacao:')
