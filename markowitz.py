@@ -83,6 +83,8 @@ class Markowitz(object):
         self.c6 = self.model.addConstr(gp.quicksum(self.y[i] for i in range(self.n)) <= self.K_max)
         self.c7 = self.model.addConstrs(gp.quicksum(self.w[i] for i in range(self.limites[j] , self.limites[j+1])) <= 
             self.P_categorias[j] for j in range(len(self.limites)-1))
+        
+        self.result = None
     
     def solve(self, time=None, heur=None):
         if(self.K_min > self.K_max):
