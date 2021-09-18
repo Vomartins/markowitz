@@ -15,18 +15,18 @@ class Carteira(object):
         print(f"Retorno esperado --> {round(100 * self.Retorno,2)}%")
         print(f"Risco estimado --> {round(100 * self.Risco,2)}%")
         for i in range(len(self.fundos)):
-            print(f"Fundo {self.fundos[i]} ({self.descricao[i]}) --> {round(100*self.porcentagem[i],2)}%; R$ {round(C*self.porcentagem[i],2)} --> R$ {self.minFundos[i]}")
+            #print(f"Fundo {self.fundos[i]} ({self.descricao[i]}) --> {round(100*self.porcentagem[i],2)}%; R$ {round(C*self.porcentagem[i],2)} --> R$ {self.minFundos[i]}")
+            print(f"Fundo {self.fundos[i]} ({self.descricao[i]}) \t Peso: {round(100*self.porcentagem[i],2)}% \t Valor: R$ {round(C*self.porcentagem[i],2)}")
 
     def __repr__(self):
         return ('''Carteira(Retorno={}, Risco={}, Qtd. de fundos={},
 fundos={}, 
 porcentagem={}, 
 descricao={}, 
-minFundos={}
-'''.format(self.Retorno, self.Risco, len(self.fundos), self.fundos, self.porcentagem, self.descricao, self.minFundos))
+minFundos={}'''.format(self.Retorno, self.Risco, len(self.fundos), self.fundos, self.porcentagem, self.descricao, self.minFundos))
 
     def __str__(self):
-        return ('Um objeto Carteira com {} fundos'.format(len(self.fundos)))
+        return self.__repr__()
 
 class Markowitz(object):
     def __init__(self, C, minRetorno, K_min, K_max, P_min, P_max, P_categorias, limites, 
