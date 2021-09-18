@@ -1,13 +1,9 @@
 def main():
     import numpy as np
     import pandas as pd
-    
-    from markowitz import Markowitz
+    from scipy.stats import gmean
 
-    # Função auxiliar para o cálculo da média geométrica:
-    def geo_mean(iterable):
-        a = np.array(iterable)
-        return a.prod()**(1.0/len(a))
+    from markowitz import Markowitz
 
     # Leitura e pré-processamento dos dados de entrada:
     print('-'*50)
@@ -19,44 +15,44 @@ def main():
     pf = pd.read_excel('perfilfundos.xlsx', usecols = ['CNPJ', 'APLICACAO_MINIMA', 'CATEGORIA', 'SUBCATEGORIA'])
     pf['CNPJ'] = pf['CNPJ'].str.replace('[./-]', '', regex=True)
     pf['APLICACAO_MINIMA'] = pf['APLICACAO_MINIMA'].str.replace('-', '0').str.replace('R\$ ','').str.replace('.', '').astype(float)
-    pf.fillna(0, inplace=True)
-    pf.set_index('CNPJ',inplace=True)
 
-    pf_ordered = pf.sort_values(by ='CATEGORIA')
-    pf_ordered.drop(index=(list(set(pf.index)-set(df.columns))),inplace=True)
+    pf.set_index('CNPJ',inplace=True)
+    pf.drop(index=(list(set(pf.index)-set(df.columns))),inplace=True)
+    pf.reset_index(inplace=True)
+
+    CNPJ_dict_tipos = dict()
+    for cat in pf.CATEGORIA.unique():
+        CNPJ_dict_tipos[cat] = pf.query('CATEGORIA == @cat').index.to_list()
+
+    CNPJ_list = list(pf.CNPJ)
+    df = df[CNPJ_list]
+
+    pf.set_index('CNPJ',inplace=True)
 
     print('Dados carregados!')
     print()
 
     print('Preparando os parametros para o modelo...')
     # Preparando os parâmetros de entrada do modelo:
-    categorias = list(pf_ordered['CATEGORIA'].unique())
-
-    limites = [0]
-    a = 0
-    for c in categorias:
-        a += len(pf_ordered[pf_ordered['CATEGORIA'] == c])
-        limites.append(a)
-
-    cnpj = list(pf_ordered.index)
-    df = df[cnpj]
-
     df_retorno = df.pct_change().dropna()
     sigma = (df_retorno.cov()*252).to_numpy()
-    media = (df_retorno+1).apply(geo_mean)**252-1
+    media = (df_retorno+1).apply(gmean)**252-1
 
-    minFundos = np.array(pf_ordered['APLICACAO_MINIMA'])
-    n = len(minFundos)
+    valorMinFundos = np.array(pf['APLICACAO_MINIMA'])
 
     minRetorno = 0.002
     C = 100000
-
-    P_categorias = [0.25, 0.15, 0.25, 0.35]
-
     K_min = 3
     K_max = 10
     P_min = 0.05
     P_max = 0.3
+
+    P_categorias = {
+        'A\u00E7\u00F5es': 0.25,
+        'Cambial': 0.00,
+        'Multimercados': 0.35,
+        'Renda Fixa': 0.50
+    }
 
     print('Parametros prontos!')
     print()
@@ -64,7 +60,8 @@ def main():
     # Instanciando o modelo e chamando o comando de "solve()":
     print('Instanciando o modelo para a minimizacao do risco...')
 
-    modelo = Markowitz(C, minRetorno, K_min, K_max, P_min, P_max, P_categorias, limites, n, minFundos, sigma, media, cnpj)
+    modelo = Markowitz(C, CNPJ_list, CNPJ_dict_tipos, P_min, P_max, P_categorias, 
+        K_min, K_max, valorMinFundos, sigma, media, minRetorno)
 
     print('Inicio da solucao do problema...')
     carteira = modelo.solve(time = 30)
@@ -73,15 +70,15 @@ def main():
     print()
 
     print('Resultado obtido:')
-    
+
     # Impressao dos resultados:
     carteira.exibir(C)
     print()
 
     print('Instanciando o modelo com o objetivo classico de Markowitz...')
 
-    modelo = Markowitz(C, minRetorno, K_min, K_max, P_min, P_max, P_categorias, limites, n, minFundos, sigma, media, cnpj,
-    obj_type='markowitz', l=40)
+    modelo = Markowitz(C, CNPJ_list, CNPJ_dict_tipos, P_min, P_max, P_categorias, K_min, K_max, 
+        valorMinFundos, sigma, media, obj_type='markowitz', l=50)
 
     print('Inicio da solucao do problema...')
     carteira = modelo.solve(time = 30)    
