@@ -1,6 +1,6 @@
 import gurobipy as gp
 import numpy as np
-from math import ceil
+from math import ceil, sqrt
 
 class Carteira(object):
     def __init__(self, Retorno, Risco, fundos, porcentagem, CNPJ_list, valorMinFundos):
@@ -50,7 +50,7 @@ class Markowitz(object):
         self.valorMinFundos = valorMinFundos
         self.categorias = list(self.CNPJ_dict_tipos.keys())
         self.sigma = sigma
-        self.media = media
+        self.media = np.array(media)
         self.l = l
 
         self.GAP = float('inf')
@@ -63,27 +63,26 @@ class Markowitz(object):
 
         self.model = gp.Model()
 
-        self.w = self.model.addVars(range(self.n), ub = 1, vtype = gp.GRB.CONTINUOUS)
-        self.y = self.model.addVars(range(self.n), vtype = gp.GRB.BINARY)
+        self.w = self.model.addMVar(self.n, ub = 1, vtype = gp.GRB.CONTINUOUS)
+        self.y = self.model.addMVar(self.n, vtype = gp.GRB.BINARY)
 
         self.modelo_classico_labels = set(['classico', 'markowitz'])
 
         if(self.obj_type in self.modelo_classico_labels):
-            self.obj_fun = self.model.setObjective(gp.quicksum(self.media[i] * self.w[i] for i in range(self.n)) - 
-            self.l * gp.quicksum(self.w[i] * self.sigma[i][j] * self.w[j] for i in range(self.n) for j in range(self.n)), 
-            sense = gp.GRB.MAXIMIZE)
+            self.obj_fun = self.model.setObjective(self.w @ self.media - self.l * (self.w @ self.sigma @ self.w), sense = gp.GRB.MAXIMIZE)
         else:
-            self.obj_fun = self.model.setObjective(gp.quicksum(
-                self.w[i] * self.sigma[i][j] * self.w[j] for i in range(self.n) for j in range(self.n)), sense = gp.GRB.MINIMIZE)
-            self.c1 = self.model.addConstr(gp.quicksum(self.media[i] * self.w[i] for i in range(self.n)) >= self.minRetorno)
+            self.obj_fun = self.model.setObjective(self.w @ self.sigma @ self.w, sense = gp.GRB.MINIMIZE)
+            self.c1 = self.model.addConstr((self.w @ self.media) >= self.minRetorno)
     
-        self.c2 = self.model.addConstr(gp.quicksum(self.w[i] for i in range(self.n)) == 1)
+        self.c2 = self.model.addConstr(self.w.sum() == 1)
         self.c3 = self.model.addConstrs(self.w[i] >= max(self.P_min, self.valorMinFundos[i]/self.C) * self.y[i] for i in range(self.n))
         self.c4 = self.model.addConstrs(self.w[i] <= self.P_max * self.y[i] for i in range(self.n))
-        self.c5 = self.model.addConstr(gp.quicksum(self.y[i] for i in range(self.n)) >= self.K_min)
-        self.c6 = self.model.addConstr(gp.quicksum(self.y[i] for i in range(self.n)) <= self.K_max)
-        self.c7 = self.model.addConstrs(gp.quicksum(self.w[i] for i in self.CNPJ_dict_tipos[k]) <= 
-            self.P_categorias[k] for k in self.categorias)
+        self.c5 = self.model.addConstr(self.y.sum() >= self.K_min)
+        self.c6 = self.model.addConstr(self.y.sum() <= self.K_max)
+        if(  round(sum(list(self.P_categorias.values())), 5) == 1  ):
+            self.c7 = self.model.addConstrs(self.w[self.CNPJ_dict_tipos[k]].sum() == self.P_categorias[k] for k in self.categorias)
+        else:
+            self.c7 = self.model.addConstrs(self.w[self.CNPJ_dict_tipos[k]].sum() <= self.P_categorias[k] for k in self.categorias)
         
         self.result = None
     
@@ -120,15 +119,14 @@ class Markowitz(object):
             print('Nenhuma solucao encontrada!')
             return Carteira(0, 0, [], [], [], [])
         
-        self.Retorno = np.dot(self.media, np.array([self.w[i].x for i in range(len(self.w))]))
+        self.Retorno = self.w.X @ self.media
         if (self.obj_type in self.modelo_classico_labels):
-            self.vect_w = np.array([[self.w[i].x for i in range(self.n)]]).T
-            self.Risco = float(np.sqrt(self.vect_w.T @ self.sigma @ self.vect_w))
+            self.Risco = sqrt(self.w.X @ self.sigma @ self.w.X)
         else:
-            self.Risco = np.sqrt(self.model.getObjective().getValue())
+            self.Risco = sqrt(self.model.getObjective().getValue())
 
-        self.fundos = [i for i in range(len(self.w)) if (self.w[i].x) > 0.0 ]
-        self.porcentagem = [self.w[i].x for i in self.fundos]
+        self.fundos = np.flatnonzero(self.w.X != 0).tolist()
+        self.porcentagem = [self.w[j].X[0] for j in self.fundos]
         self.cnpj_escolhidos = [self.CNPJ_list[i] for i in self.fundos]
         self.apm_escolhidos = [self.valorMinFundos[i] for i in self.fundos]
 
@@ -193,7 +191,7 @@ class Markowitz(object):
             self.model.remove(self.c1)
         except:
             pass
-        self.c1 = self.model.addConstr(gp.quicksum(self.media[i] * self.w[i] for i in range(self.n)) >= self.minRetorno)
+        self.c1 = self.model.addConstr((self.w @ self.media) >= self.minRetorno)
         
     def exibir_par(self):
 
