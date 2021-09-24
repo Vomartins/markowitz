@@ -85,6 +85,53 @@ class Markowitz(object):
             self.c7 = self.model.addConstrs(self.w[self.CNPJ_dict_tipos[k]].sum() <= self.P_categorias[k] for k in self.categorias)
         
         self.result = None
+
+        self.variaveisFixas = set()
+
+    def fixarValores(self, valores_dict):
+        for key in valores_dict:
+            try:
+                self.indice = self.CNPJ_list.index(key)
+                self.w[self.indice].setAttr("ub", valores_dict[key])
+                self.w[self.indice].setAttr("lb", valores_dict[key])
+                self.variaveisFixas.add(key)
+            except:
+                pass
+        self.model.update()
+
+    def resetarFixos(self, id_list=None):
+        if self.variaveisFixas == set():
+            return
+
+        if(isinstance(id_list, str)):
+            try:
+                self.indice = self.CNPJ_list.index(id_list)
+                self.w[self.indice].setAttr("ub", 1)
+                self.w[self.indice].setAttr("lb", 0)
+                self.variaveisFixas.remove(id_list)
+                print('Ativo com ID {} nao esta mais fixado'.format(id_list))
+            except:
+                print('Nao foi possivel remover um valor fixo do ativo {}'.format(id_list))
+            return
+        
+        if(isinstance(id_list, list)):
+            for key in id_list:
+                try:
+                    self.indice = self.CNPJ_list.index(key)
+                    self.w[self.indice].setAttr("ub", 1)
+                    self.w[self.indice].setAttr("lb", 0)        
+                    self.variaveisFixas.remove(key)
+                except:
+                    pass
+            return                
+
+        if(id_list == None):
+            for key in self.variaveisFixas:
+                self.indice = self.CNPJ_list.index(key)
+                self.w[self.indice].setAttr("ub", 1)
+                self.w[self.indice].setAttr("lb", 0)
+            self.variaveisFixas = set()
+            return
     
     def solve(self, time=None, heur=None, log=0):
         if(self.K_min > self.K_max):
